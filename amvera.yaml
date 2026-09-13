@@ -6,6 +6,3 @@ meta:
 run:
   containerPort: 3000
   persistenceMount: /data
-run:
-  containerPort: 3000
-  persistenceMount: /data

@@ -1,7 +1,21 @@
 (() => {
-  const TOKEN='aiMentorToken'; let token=localStorage.getItem(TOKEN); if(!token){location.href='index.html';return;}
+  const TOKEN='aiMentorToken'; let token=localStorage.getItem(TOKEN);
+  const GUARD='aiMentorRedirectGuard';
+  function guardedRedirectToIndex(){
+    const guard=JSON.parse(sessionStorage.getItem(GUARD)||'{"count":0,"ts":0}');
+    const now=Date.now();
+    if(now-guard.ts>4000)guard.count=0;
+    guard.count++;guard.ts=now;
+    sessionStorage.setItem(GUARD,JSON.stringify(guard));
+    if(guard.count>3){
+      document.body.innerHTML='<p style="padding:40px;font-family:sans-serif">Не удалось подключиться к серверу. Обновите страницу через минуту.</p>';
+      return;
+    }
+    location.href='index.html';
+  }
+  if(!token){guardedRedirectToIndex();return;}
   const $=id=>document.getElementById(id); let me=null, activeChat=null, chats=[];
-  async function api(url,options={}){const r=await fetch(url,{...options,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,...(options.headers||{})}});if(r.status===401){localStorage.removeItem(TOKEN);location.href='index.html';throw new Error('Сессия истекла');}const d=await r.json();if(!r.ok)throw new Error(d.error||'Ошибка сервера');return d;}
+  async function api(url,options={}){const r=await fetch(url,{...options,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,...(options.headers||{})}});if(r.status===401){localStorage.removeItem(TOKEN);guardedRedirectToIndex();throw new Error('Сессия истекла');}const d=await r.json();if(!r.ok)throw new Error(d.error||'Ошибка сервера');return d;}
   function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
   function mdInline(s){
     s=s.replace(/`([^`]+?)`/g,'<code>$1</code>');
@@ -56,7 +70,7 @@
   }
   function renderHistory(){ $('history').innerHTML=chats.length?chats.map(c=>`<div class="history-item ${activeChat&&activeChat.id===c.id?'active':''}"><button class="history-open" data-id="${c.id}"><span>${esc(c.title)}</span><small>${new Date(c.updated_at).toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'})}</small></button><button class="history-delete" data-id="${c.id}" title="Удалить чат" aria-label="Удалить чат">✕</button></div>`).join(''):'<div class="empty-side">Пока нет диалогов.<br>Создай первый — разберёмся вместе.</div>';document.querySelectorAll('.history-open').forEach(b=>b.onclick=()=>openChat(Number(b.dataset.id)));document.querySelectorAll('.history-delete').forEach(b=>b.onclick=e=>{e.stopPropagation();deleteChat(Number(b.dataset.id));});}
   async function deleteChat(id){if(!confirm('Удалить этот диалог без возможности восстановления?'))return;await api(`/api/chats/${id}`,{method:'DELETE'});chats=chats.filter(c=>c.id!==id);if(activeChat&&activeChat.id===id){activeChat=null;const d=await api('/api/me');renderDashboard(d.profile);}renderHistory();}
-  async function load(){const[d,c]=await Promise.all([api('/api/me'),api('/api/chats')]);me=d.user;chats=c.chats;const onboarding=sessionStorage.getItem('aiMentorOnboarding')==='1';if(onboarding&&!d.profile){sessionStorage.removeItem('aiMentorOnboarding');renderHistory();showProfile(d.profile);}else{renderDashboard(d.profile);renderHistory();}}
+  async function load(){const[d,c]=await Promise.all([api('/api/me'),api('/api/chats')]);sessionStorage.removeItem(GUARD);me=d.user;chats=c.chats;const onboarding=sessionStorage.getItem('aiMentorOnboarding')==='1';if(onboarding&&!d.profile){sessionStorage.removeItem('aiMentorOnboarding');renderHistory();showProfile(d.profile);}else{renderDashboard(d.profile);renderHistory();}}
   function renderDashboard(profile){$('profile-panel').classList.add('hidden');$('settings-panel').classList.add('hidden');$('chat-panel').classList.add('hidden');$('dashboard').classList.remove('hidden');$('top-title').textContent=profile?.name?`Привет, ${profile.name} 👋`:'Добро пожаловать в AI-Mentor';$('top-sub').textContent=profile?'Профиль готов — теперь двигаемся к цели.':'Заполни профиль, чтобы наставник стал персональным.'; $('dashboard').innerHTML=`<div class="hero glass"><div><span class="eyebrow">YOUR NEXT MOVE</span><h1>${profile?'Давай превратим цель в маршрут.':'Сначала познакомимся.'}</h1><p>${profile?'AI-Mentor уже знает базовый контекст о тебе. Выбери задачу или открой новый чат.':'Пара минут — и рекомендации будут учитывать твой возраст, этап обучения, интересы и цель.'}</p></div><button class="primary hero-btn" id="hero-action">${profile?'Начать диалог':'Заполнить профиль'}</button></div><div class="dash-grid"><div class="metric glass"><span>Профиль</span><strong>${profile?'Готов':'0%'}</strong><small>${profile?'можно улучшать в любой момент':'нужно заполнить'}</small></div><div class="metric glass"><span>Диалоги</span><strong>${chats.length}</strong><small>сохранены на сервере</small></div><div class="metric glass"><span>Фокус</span><strong>${esc(profile?.goal||'—')}</strong><small>главная цель</small></div></div><div class="quick glass"><div><h3>Что умеет AI-Mentor</h3><p>Профиль → рекомендации → план → сопровождение. Один наставник вместо десятка разрозненных сервисов.</p></div><div class="quick-list"><span>01 <b>Понять себя</b></span><span>02 <b>Выбрать направление</b></span><span>03 <b>Сделать план</b></span><span>04 <b>Отслеживать прогресс</b></span></div></div>`;$('hero-action').onclick=()=>profile?newChat():showProfile(profile);}
   async function newChat(){const d=await api('/api/chats',{method:'POST',body:JSON.stringify({title:'Новый диалог'})});chats=[d.chat,...chats];renderHistory();await openChat(d.chat.id);}
   async function openChat(id){activeChat=chats.find(c=>c.id===id)||null;if(!activeChat)return;renderHistory();$('dashboard').classList.add('hidden');$('profile-panel').classList.add('hidden');$('settings-panel').classList.add('hidden');$('chat-panel').classList.remove('hidden');$('chat-title').textContent=activeChat.title;const d=await api(`/api/chats/${id}/messages`);$('messages').innerHTML='';d.messages.forEach(m=>addMessage(m.role,m.content));if(!d.messages.length)addMessage('assistant','Привет! Я твой AI-Mentor. Расскажи, чего ты хочешь добиться — выбрать направление, разобраться с вузами, составить план учёбы или просто понять, с чего начать.');}

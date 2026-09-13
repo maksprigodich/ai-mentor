@@ -17,6 +17,12 @@ db.pragma('foreign_keys = ON');
 
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
+app.use((req, res, next) => {
+  if (/^\/(\.env(\..*)?|schema\.sql|package(-lock)?\.json|ai-mentor\.db.*|amvera\.yaml|Dockerfile)$/i.test(req.path)) {
+    return res.status(404).end();
+  }
+  next();
+});
 app.use(express.static(__dirname));
 
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');

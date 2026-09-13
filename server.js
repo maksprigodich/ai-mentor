@@ -10,7 +10,8 @@ const Database = require('better-sqlite3');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-change-me';
-const db = new Database(path.join(__dirname, 'ai-mentor.db'));
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'ai-mentor.db');
+const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 

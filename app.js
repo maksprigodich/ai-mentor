@@ -1,6 +1,11 @@
 (() => {
   const TOKEN='aiMentorToken'; let token=localStorage.getItem(TOKEN);
   const GUARD='aiMentorRedirectGuard';
+  const BACKOFF='aiMentorBackoffUntil';
+  function isBackedOff(){return Date.now()<Number(sessionStorage.getItem(BACKOFF)||0);}
+  function setBackoff(sec){sessionStorage.setItem(BACKOFF,String(Date.now()+sec*1000));}
+  function showCooldown(msg){document.body.innerHTML=`<p style="padding:40px;font-family:sans-serif">${msg}</p>`;}
+  if(isBackedOff()){showCooldown('Сервер временно ограничил запросы. Обновите страницу через 20–30 секунд.');return;}
   function guardedRedirectToIndex(){
     const guard=JSON.parse(sessionStorage.getItem(GUARD)||'{"count":0,"ts":0}');
     const now=Date.now();
@@ -15,7 +20,7 @@
   }
   if(!token){guardedRedirectToIndex();return;}
   const $=id=>document.getElementById(id); let me=null, activeChat=null, chats=[];
-  async function api(url,options={}){const r=await fetch(url,{...options,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,...(options.headers||{})}});if(r.status===401){localStorage.removeItem(TOKEN);guardedRedirectToIndex();throw new Error('Сессия истекла');}const d=await r.json();if(!r.ok)throw new Error(d.error||'Ошибка сервера');return d;}
+  async function api(url,options={}){const r=await fetch(url,{...options,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,...(options.headers||{})}});if(r.status===429){setBackoff(20);showCooldown('Сервер временно ограничил запросы. Обновите страницу через 20–30 секунд.');throw new Error('Слишком много запросов');}if(r.status===401){localStorage.removeItem(TOKEN);guardedRedirectToIndex();throw new Error('Сессия истекла');}const d=await r.json();if(!r.ok)throw new Error(d.error||'Ошибка сервера');return d;}
   function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
   function mdInline(s){
     s=s.replace(/`([^`]+?)`/g,'<code>$1</code>');

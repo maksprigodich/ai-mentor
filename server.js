@@ -66,6 +66,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/me', auth, (req, res) => {
   const user = db.prepare('SELECT id,email,created_at FROM users WHERE id=?').get(req.user.id);
+  if (!user) return res.status(401).json({ error: 'Сессия истекла' });
   res.json({ user, profile: getProfile(req.user.id) });
 });
 
